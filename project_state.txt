@@ -1,0 +1,487 @@
+================================================================
+NOKIA 3310 WEATHER RETRO — PROJECT STATE
+================================================================
+[METADANE]
+- Faza: 5/5 — KOMPLETNE + redesign dotykowy (bez keypadu) + test funkcjonalny 36/36 PASS
+  (tsc --noEmit 0 bledow; test: `node test\app_test.mjs` przy uruchomionym dev server :5173)
+- Ukonczone moduly: wszystkie — package.json, vite.config.ts, capacitor.config.ts,
+  tsconfig.json, tsconfig.node.json, index.html (obudowa Nokii + canvas + klawiatura),
+  src/types/weather.ts, src/vite-env.d.ts (+ declare module '*.css'),
+  src/services/weather_service.ts (kaskada OM -> met-no -> WeatherAPI, failover 3000ms,
+  geocoding OM, reverse geocode BigDataCloud, cache LS 10min/24h),
+  src/services/speech_service.ts, src/graphics/pixel_bitmaps.ts, src/graphics/bitmap_font.ts,
+  src/graphics/lcd_renderer.ts (bufor 104x64, upscale, siatka, dither, vignette, flash,
+  miniIcon 8x8), src/components/terminal_ui.ts (maszyna ekranow, multi-tap, szukaj,
+  GPS, glos, menu), src/main.ts (bootstrap, klawiatura fizyczna + swipe, rAF, SW),
+  src/style.css, public/manifest.webmanifest, public/sw.js, public/icon.svg
+- Build: dist/ = index.html + assets/*.js|css + sw.js + manifest + ikona
+  (JS 44.88 kB / gzip 14.79 kB, CSS 2.53 kB / gzip 1.07 kB)
+- Oczekujace zadania: brak (opcjonalnie: `npm run android:apk` po ustawieniu
+  Android SDK + `npm run cap:sync`)
+- UWAGA (srodowisko): node/npm nie sa w PATH tego terminala (cmd.exe) — uzywac:
+  set "PATH=D:\pinokio\bin\miniconda;%PATH%" && D:\pinokio\bin\miniconda\npm.cmd <cmd>
+
+[DRY RUN / ARCHITEKTURA]
+Pogodynka3310/
+├── project_state.txt          — ten plik (stan sesji)
+├── package.json               — skrypty: dev/build/preview, Capacitor
+├── vite.config.ts             — Vite (base './')
+├── capacitor.config.ts        — APK: appId pl.mechagdynia.pogoda3310
+├── tsconfig.json              — TS strict, ES2020, DOM
+├── index.html                 — obudowa Nokii, canvas LCD, 2 przyciski OK/ANULUJ (bez keypadu)
+├── public/
+│   ├── manifest.webmanifest   — PWA manifest
+│   ├── sw.js                  — Service Worker (app shell + stale-while-revalidate API)
+│   └── icon.svg               — ikona PWA (pixel sun)
+└── src/
+    ├── main.ts                — bootstrap: renderer+UI+klawiatura+PWA+loop rAF
+    ├── style.css              — obudowa telefonu, LCD, klawisze, responsywnosc
+    ├── vite-env.d.ts          — typy import.meta.env (VITE_WEATHERAPI_KEY)
+    ├── types/weather.ts       — typy domeny + payloady 3 providerow + kontrakty UI
+    ├── services/
+    │   ├── weather_service.ts — kaskada: Open-Meteo (1) -> api.met.no (2) ->
+    │   │                         WeatherAPI (3), failover 3000ms (AbortController),
+    │   │                         geocoding (Open-Meteo), reverse geocode (BigDataCloud),
+    │   │                         cache LocalStorage (wx 10min / geo 24h)
+    │   └── speech_service.ts  — SpeechRecognition (pl-PL), extractPlace()
+    ├── graphics/
+    │   ├── pixel_bitmaps.ts   — ikony 16x16 (słońce/chmury/deszcz/burza/śnieg/mgła/wiatr),
+    │   │                         2-4 klatki animacji, glyphy UI 8x8 (GPS/mikrofon/lupa/strzałki)
+    │   ├── bitmap_font.ts     — font bitmapowy 5x7/5x8, pelna diakrytyka PL, topOffsets
+    │   └── lcd_renderer.ts    — bufor wirtualny 104x64 px, upscale do canvas
+    │                           (imageSmoothing=off), siatka LCD, dither, flash burzy
+    └── components/
+        └── terminal_ui.ts     — maszyna stanow ekranow (boot/dziś/tydzień/2tyg/miesiąc/
+                                 terminal GPS/głos/menu), multi-tap, gesty swipe
+
+[ZMIENNE I INTERFEJSY]
+LCD: W=104, H=64 (wirtualne piksele), skala 2..10 (auto do CSS)
+Kolory LCD: OFF=#9bbc0f (gradient do #8bac0f), ON=#0f380f, GRID=#306230
+Font: 5x7 (diakrytyki 5x8 z topOffset), pitch=6px
+Ekran: status bar y0-7 (sygnal/bateria/czas/NOKIA), content y9-54, softkeys y56-63
+TabId: 'today' | 'week' | 'twoweeks' | 'month'
+IconId: 'sun' | 'partcloud' | 'cloud' | 'fog' | 'rain' | 'thunder' | 'snow' | 'wind'
+WeatherCondition: clear, partly-cloudy, cloudy, overcast, fog, drizzle, rain, heavy-rain,
+  thunderstorm, snow, heavy-snow, sleet (etykiety PL w conditionLabel)
+WeatherSnapshot { source: Provider, city, fetchedAt, current, hourly[8], daily[16] }
+Provider = 'open-meteo' | 'met-no' | 'weatherapi'
+Kaskada (bezglosny failover przy 4xx/5xx/timeout>3000ms; linkedSignal = external + timer):
+  1. Open-Meteo  — bez klucza, forecast_days=16, timezone=auto
+  2. api.met.no  — bez klucza, User-Agent: NokiaWeatherRetroApp/1.0 (kontakt@twojadomena.pl)
+                   (browser cicho odrzuca zabroniony naglowek User-Agent -> 403 absorbowane
+                   przez kaskade), compact = 1 punkt siatki, ~10 dni, czasy UTC
+  3. WeatherAPI  — opcjonalny klucz tylko przez VITE_WEATHERAPI_KEY,
+                   do 14 dni, q=miasto (schema kodow = Weatherstack -> wspolny wsToCondition)
+API:
+  - Geocoding:  https://geocoding-api.open-meteo.com/v1/search?name=&count=5&language=pl&format=json
+  - Prognoza 1: https://api.open-meteo.com/v1/forecast?latitude&longitude&timezone=auto
+    &current=time,temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,
+    weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,pressure_msl
+    &hourly=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m
+    &daily=weather_code,temperature_2m_max,temperature_2m_min,
+    precipitation_probability_max,wind_speed_10m_max,precipitation_sum&forecast_days=16
+  - Prognoza 2: https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=&lon=
+  - Prognoza 3: https://api.weatherapi.com/v1/forecast.json?key=KEY&q=MIasto&days=14&aqi=no&alerts=no
+  - Reverse geocode (GPS): https://api.bigdatacloud.net/data/reverse-geocode-client
+    ?latitude=&longitude=&localityLanguage=pl
+Cache: localStorage: nokia3310:wx:{lat},{lon} (TTL 10min), nokia3310:geo:{hash(q)} (24h),
+  nokia3310:rev:{lat},{lon} (24h); koperta {t, d}; try/catch (tryb prywatny)
+Mapy warunkow: WMO (OM) wmoToCondition / symbol_code (met.no) metNoSymbolToCondition /
+  code (WeatherAPI) wsToCondition
+Wejście: BRAK klawiatury ekranowej (klawisze usunięte) — tap na LCD (paski tab y9-16,
+  wiersze wyników y25+, pozycje menu y18+, softkeys y>=55 lewa/prawa połowa) +
+  swipe L/P (próg 32px) + ukryty <input .vk> (klawiatura telefonu, gdy isTouch &&
+  wantsInput) + klawiatura PC (litery/strzałki/Enter/Backspace/Escape/Tab) +
+  multi-tap (2=ABC..9=WXYZ) + dolne przyciski OK/ANULUJ (znaczenie zależne od ekranu)
+Dni PL: NIE PON WTO ŚRO CZW PIĄ SOB
+MIESIAC: max 16 dni (limit Open-Meteo) -> wykres slupkowy + statystyki (śr/min/max/opad)
+DEFAULT_CITY: WARSZAWA 52.2297, 21.0122 (start natychmiastowy z cache)
+
+[LOG ZMIAN]
+1. [done] weather_service.ts — pelny rewrite: kaskada OM -> met.no -> WeatherAPI,
+   linkedSignal timeout 3000ms, cache, geocoding, reverse geocode, met.no UTC/daily agg
+2. [types] Provider -> 'open-meteo'|'met-no'|'weatherapi'; payloady MetNo + WeatherAPI
+   (next_X_hours: summary/details zgodne z realnym API)
+3. [vite-env] VITE_WEATHERSTACK_KEY -> VITE_WEATHERAPI_KEY
+4. [spec] kaskada Open-Meteo -> met.no -> WeatherAPI, failover 4xx/5xx/timeout>3000ms
+5. [done] speech_service.ts, pixel_bitmaps.ts, bitmap_font.ts utworzone
+6. [done] lcd_renderer.ts — pelny renderer (present(): kompozycja ImageData,
+   upscale NN, siatka LCD a=0.3, dither 4-tile 120ms, vignette, flash) + miniIcon()
+7. [done] terminal_ui.ts — maszyna ekranow: boot/today/week/2w/month/search/gps/
+   voice/menu; multi-tap 800ms (2=ABC..9=WXYZ, 0=spacja); debounce wyszukiwania
+   500ms; gen-guardy (loadGen/searchGen/voiceGen) + disposed; toast 2500ms;
+   flash burzy; softkeys; animacje ikon z animTime
+8. [done] main.ts + index.html + style.css — obudowa Nokii (bezel, d-pad, keypad
+   3x4 z * = DEL i # = MENU, softkeys MENU/ANULUJ), ResizeObserver -> lcd.resize(),
+   klawiatura fizyczna (strzalki/Enter/Backspace/Escape/Tab/0-9/spacja/litery PL),
+   swipe na LCD (próg 32px), rAF loop (dt clamp 0..100), SW register, dispose
+9. [done] PWA: manifest.webmanifest (standalone, theme #0f380f), sw.js
+   (SWE stale-while-revalidate dla 5 hostow API, cache-first shell, wersjonowanie
+   cache), icon.svg (pixel sun 16x16, crispEdges)
+10. [done] npm install (111 pkg) + build OK: tsc --noEmit (0 bledow, strict +
+    noUnusedLocals/Parameters) + vite build -> dist/ (JS 44.88 kB / gzip 14.79 kB,
+    CSS 2.53 kB / gzip 1.07 kB, PWA pliki skopiowane do dist/)
+    Fix: declare module '*.css' w vite-env.d.ts (Vite 5 nie deklaruje importow CSS)
+11. [done] Redesign dotykowy: usunięto keypad + d-pad (index.html/style.css),
+    ukryty <input .vk> (klawiatura telefonu; focus w rAF gdy isTouch && wantsInput),
+    2 dolne przyciski OK/ANULUJ (data-key SOFTL/SOFT), tap-map onTap(vx,vy)
+    (tab/wyniki/menu/softkeys), swipe L/P na canvasie, window.__UI__ (hook testowy),
+    Key += 'SOFTL'|'SOFT', onSoft(side) zależny od ekranu
+12. [done] Fixy warstwy danych (diagnoza: test/diag2-4.mjs + om_bisect.mjs):
+    - Open-Meteo: `time` w liście current -> HTTP 400 (quirk API); usunięto
+      (odpowiedź i tak zawiera current.time), fallback curTime; dodano
+      hourly=precipitation_probability (używany w kodzie, ale nigdy nie żądany -> TypeError)
+    - met.no: `time` na poziomie wpisu (ts[i].time), NIE ts[i].data.time;
+      poprawiono 5 odwołań (rzutowe throw: d.time.slice(0,10) na undefined)
+    - WeatherAPI: forecast.forecastday[] (nie .day[]), zagnieżdżone
+      day.day.{maxtemp_c,mintemp_c,maxwind_kph,totalprecip_mm,daily_chance_of_rain,snow},
+      godziny = day.hour[] (nie .hourly), wind_kph, vis_km; wsToCondition +=
+      gałąź kodów 3-cyfrowych (konto zwraca kody 4-cyfrowe Weatherstack: 1009/1063)
+    - Geocoding: count=20 + re-ranking po stronie klienta (prefiks +2, bias kraju
+      bieżącego miasta +1.5, log10(pop)) — "KRA" z PL -> Kraków (dotąd Kerang/AU)
+13. [done] Fix debounce wyszukiwania: lastSearchedQuery nie był unieważniany po
+    ANULUJ/czyszczaniu -> ponowne wpisanie tego samego miasta nie szukało
+    (pusty wynik, tap na wierszu martwy); unieważnianie w onSoft + gdy query < 2 znaków
+14. [done] test/app_test.mjs — test funkcjonalny wszystkich funkcji (Playwright,
+    Edge headless, touch, geolocation Kraków, opóźnienia GAP=400ms, zrzuty test/shots/):
+    boot->today (WARSZAWA, open-meteo), taby strzałkami + tap, scroll tygodnia,
+    menu (strzałki + tap), głos, GPS -> KRAKÓW, szukaj "KRA" (20 wyników, multi-tap,
+    ANULUJ, tap wiersza -> KRAKÓW), ODŚWIEŻ, WYCZYŚĆ CACHE + reload, swipe -> week,
+    0 błędów strony/konsoli. WYNIK: 36/36 PASS. (skrypty diagnostyczne usunięte)
+
+======================================================================
+REDESIGN 2026-08-22 — POGODA_3310_WIDGET + PEŁNA APLIKACJA
+======================================================================
+
+[STATUS PUBLIKACJI]
+- Wszystkie zmiany są wyłącznie lokalne. Nie wykonano git push, nie utworzono
+  GitHub Pages i nie dodano workflow publikującego. Wersja czeka na akceptację.
+- Lokalny podgląd produkcyjnego buildu podczas prac: http://127.0.0.1:4174/
+- Zrzuty kontrolne: test/redesign-shots/01-full-app.png,
+  02-hours.png, 03-menu-radar.png, 04-widget.png.
+
+[ARCHITEKTURA — JEDNO REPO]
+- Wybrane rozwiązanie: jedno repo i jeden GitHub Pages, ale dwa widoki URL:
+  * pełna aplikacja: adres bazowy repo (bez parametrów),
+  * widget: ten sam adres z parametrem ?view=widget.
+- Dotknięcie webowego widgetu usuwa parametr view=widget i otwiera pełną aplikację.
+- Takie rozwiązanie usuwa potrzebę utrzymywania dwóch kopii API, grafik, cache i
+  konfiguracji. Osobne repo nie daje korzyści na tym etapie.
+- Nazwa widoczna w HTML/PWA/manifeście: Pogoda_3310_widget / Pogoda 3310.
+
+[WIDGET 2×2]
+- Usunięto całą atrapę telefonu: napis NOKIA z obramówki, głośnik, przyciski
+  OK/ANULUJ i podpis pod telefonem.
+- Kontener widgetu jest kwadratowy (format odpowiadający małemu widgetowi 2×2),
+  z samym ekranem LCD wewnątrz.
+- Ekran nie zawiera już zakładek TYDZ/2TYG/MIES ani linii rozdzielających.
+- Nowy układ LCD: pikselowe NOK[animowane serce]A, godzina, miejscowość,
+  temperatura, animowana ikona i dokładnie 6 następnych godzin pod temperaturą.
+- Serce ma dwie ręcznie narysowane klatki pikselowe i pulsuje co 420 ms.
+- Wszystkie istniejące pogodowe sprite'y (słońce, chmury, deszcz, burza, śnieg,
+  mgła) pozostały animowane przez własny renderer 104×64.
+- Widok pamięta ostatnio wybraną miejscowość w localStorage; fallback: Warszawa.
+
+[PEŁNA APLIKACJA]
+- src/components/full_app.ts: nowy responsywny interfejs telefonu bez atrap klawiszy.
+- Ekran główny: animowany retro LCD + sześć kart: temperatura odczuwalna,
+  wilgotność, wiatr/kierunek, ciśnienie, widoczność, UV oraz kontekstowa wskazówka.
+- Nawigacja: Dzisiaj, Godziny, Prognoza, Meteopata. Dłuższe prognozy zostały
+  przeniesione poza ekran główny, zgodnie z wymaganiem.
+- Godziny: przewijane karty opadu/wiatru/temperatury i wykres trendu SVG.
+- Prognoza: lista do 14 dni z min/max, warunkiem, szansą i sumą opadu.
+- Meteopata: orientacyjny wskaźnik 1–10 z ciśnienia, wilgotności, wiatru i opadu,
+  osobne paski wrażliwości oraz jednoznaczne zastrzeżenie medyczne.
+- Menu: GPS, głos, podgląd 2×2, odświeżenie/cache, trzy skórki.
+- Skórki współdzielą język wizualny z Kalkulatorem walut i Flight Radarem:
+  3310 (ciemna + limonkowy LCD), Aurora (jasna/fioletowa), Radar (jasna/niebieska).
+- Zachowano kaskadę źródeł: Open-Meteo -> MET Norway -> WeatherAPI.
+
+[GPS I MIKROFON]
+- GPS w pełnej aplikacji używa navigator.geolocation, reverse geocodingu i od razu
+  pobiera prognozę. Na GitHub Pages działa przez HTTPS po zgodzie użytkownika.
+- Mikrofon korzysta z Web Speech API (pl-PL), usuwa zwroty typu „pogoda w” i
+  przekazuje nazwę do wyszukiwarki. Gdy WebView nie wspiera Web Speech, aplikacja
+  pokazuje czytelny fallback i nadal pozwala wpisać miejscowość ręcznie.
+- Osadzony WebView aplikacji „Scripts” może blokować mikrofon lub GPS zależnie od
+  wersji i ustawień. Dlatego dodano również natywny wariant Scriptable, który
+  pobiera GPS bez pośrednictwa strony.
+
+[SCRIPTABLE / OGRANICZENIE IOS]
+- Plik scriptable/Pogoda_3310_widget.js tworzy prawdziwy widget ekranu domowego,
+  używa natywnego GPS, Open-Meteo, odświeża się co około 30 minut i po dotknięciu
+  otwiera pełną aplikację z GitHub Pages.
+- Przed późniejszym użyciem należy zastąpić USERNAME w DEFAULT_APP_URL własną nazwą
+  GitHub albo wkleić pełny URL jako Widget Parameter w Scriptable.
+- Ważne ograniczenie platformy: widgety iOS/WidgetKit są statycznymi migawkami;
+  nie mogą stale odtwarzać animacji HTML/Canvas ani bić sercem co 420 ms. Animacje
+  działają w webowym podglądzie i w pełnej aplikacji. Natywny widget Scriptable
+  pokazuje serce statyczne i jest okresowo odświeżany przez system.
+
+[PWA / CACHE]
+- Manifest i tytuły zmieniono na Pogoda_3310_widget.
+- Dodano skrót PWA „Podgląd widgetu”.
+- Service worker podniesiono do pogoda3310-v2; nawigacja jest network-first, aby po
+  wdrożeniu stara powłoka nie zasłaniała nowej wersji, API nadal stale-while-revalidate.
+- Vite base='./' nadal obsługuje GitHub Pages w dowolnej podścieżce.
+
+[WERYFIKACJA]
+- TypeScript strict/noUnused: PASS, 0 błędów.
+- Build produkcyjny Vite: PASS.
+  dist/assets: CSS 16.78 kB (gzip 4.44 kB), JS 53.04 kB (gzip 17.67 kB).
+- test/redesign_test.mjs (Edge headless, iPhone-like 390×844, touch, GPS Kraków,
+  deterministyczne mocki API): 11/11 PASS.
+- Sprawdzone: start pełnej aplikacji, brak starego napisu, 6 metryk, osobne godziny,
+  14 dni poza home, wyszukiwarka, wybór miasta, skórka Radar, tryb widgetu bez
+  obudowy/przycisków, otwieralny ekran LCD, brak błędów konsoli i strony.
+
+[NASTĘPNY ETAP — DOPIERO PO AKCEPTACJI WYGLĄDU]
+1. Wprowadzić docelowy URL GitHub Pages do skryptu Scriptable.
+2. Dopiero wtedy dodać/uruchomić workflow GitHub Pages.
+3. Sprawdzić na fizycznym iPhone i Androidzie uprawnienia GPS/mikrofonu oraz safe-area.
+4. Opcjonalnie spakować ten sam build przez Capacitor jako natywną aplikację Android.
+
+======================================================================
+POPRAWKI WIZUALNE I ANIMACJE — 2026-08-22, ETAP 2
+======================================================================
+
+[LCD / WIDGET / DUŻY EKRAN]
+- Żółto-zielony ekran pełnej aplikacji dochodzi teraz bez ciemnego marginesu do
+  wewnętrznej krawędzi ramki. Proporcja pozostaje dokładnie 104:64, więc canvas
+  nie jest zniekształcany na iPhone ani Androidzie.
+- Duży ekran automatycznie rośnie razem z szerokością aplikacji; zawartość ma
+  więcej oddechu i wykorzystuje całą szerokość.
+- Pikselowe serce NOK[serce]A zostało opuszczone o 2 px: górna krawędź i środek
+  są teraz w linii z literami, także w większej klatce pulsu.
+- W sześciu kolumnach LCD kolejność zmieniono na: temperatura (np. 22°), a
+  dokładnie pod nią wycentrowana godzina (np. 02). Wartości mają wspólną oś.
+- Warstwa danych dostarcza teraz 16 kolejnych godzin zamiast 8 pozycji co 3 h.
+  Widget zachowuje czytelne 6 kolumn, a pełny widok Godziny pokazuje 16 pozycji.
+
+[DESZCZ I ŻYWE IKONY]
+- Sprite deszczu 3310 ma teraz dłuższe, trzy-pikselowe kreski wychodzące spod
+  chmury. Cztery klatki przesuwają je w dół i po skosie.
+- Kafelki godzinowe dostały animacje CSS w stylu pixel-art:
+  * deszcz: trzy migające/przesuwające się kreski,
+  * słońce: pulsujące, skracające i wydłużające się promienie,
+  * chmura: dyskretny ruch w poziomie,
+  * burza: nieregularnie migająca błyskawica,
+  * śnieg i mgła: osobne animowane warianty.
+- Te same żywe symbole są użyte w poradzie i prognozie dziennej.
+
+[PROCENT ZACHMURZENIA]
+- HourPoint rozszerzono o cloudCoverPct. Open-Meteo pobiera hourly=cloud_cover,
+  MET Norway używa cloud_area_fraction, WeatherAPI używa hourly.cloud.
+- Dobór animacji na podstawie realnego zachmurzenia:
+  * 0–12%: samo duże słońce,
+  * 13–45%: duże, wyraźne słońce i mała chmurka,
+  * 46–88%: większa chmura częściowo zasłania słońce,
+  * 89–100%: pełna chmura bez słońca.
+- Do silnika bitmap dodano suncloud: duże animowane słońce z małą przesuwającą
+  się chmurką. Widget używa go niezależnie od ogólnej etykiety dostawcy.
+
+[PROCENTY OPADÓW]
+- Ekran Dzisiaj ma teraz 8 metryk. Dodano osobno „Szansa opadu XX%” oraz
+  „Zachmurzenie XX%”.
+- Wskazówka pokazuje szansę opadów i zachmurzenie w procentach.
+- Każda karta godzinowa pokazuje duży procent opadu; lista dzienna zachowuje
+  procent i przewidywaną sumę mm.
+
+[WYKRES GODZINOWY]
+- Usunięto temperaturę i godzinę z kafelków animacji.
+- Temperatura jest podpisana bezpośrednio nad każdym punktem wykresu.
+- Godzina jest wycentrowana na osi pod odpowiadającym punktem.
+- Od punktu do osi prowadzi cienka przerywana linia. Wykres ma poziome
+  przewijanie dla pełnych 16 godzin, bez ściskania opisów.
+- Kafelki zostały przeznaczone tylko dla żywej ikony, procentu opadu i wiatru.
+
+[METEOPATA I KOMUNIKATY]
+- Cztery wskaźniki Meteopaty otrzymały własne retro ikony: ciśnienie,
+  wilgotność, wiatr i UV.
+- Zwykłe wskazówki są teraz pozytywne i praktyczne: kalosze, peleryna, szalik,
+  ciepłe warstwy, okulary UV, wiatroszczelna kurtka.
+- Ton ostrzegawczy jest używany tylko dla potencjalnie groźnych warunków:
+  burzy, silnej ulewy i intensywnej śnieżycy. Wtedy aplikacja zaleca sprawdzenie
+  lokalnych komunikatów/wiadomości lub sytuacji drogowej, bez udawania systemu
+  oficjalnych alertów, którego obecne API nie dostarcza.
+
+[NOWA IKONA APLIKACJI]
+- public/icon.svg zostało całkowicie przeprojektowane.
+- Ikona wygląda jak mały, zaokrąglony ekran 3310: ciemna wielowarstwowa ramka,
+  żółto-zielone LCD i pikselowa scena łącząca duże słońce, chmurę, trzy kreski
+  deszczu oraz błyskawicę.
+- SVG 512×512 / viewBox 32×32 zachowuje ostre piksele i skaluje się bez utraty
+  jakości. Manifest deklaruje ikonę jako zwykłą oraz maskable.
+- Podgląd PNG z testu: test/redesign-shots/05-app-icon.png.
+- Service worker podniesiono do pogoda3310-v3, aby telefon nie trzymał starej ikony.
+
+[WERYFIKACJA ETAPU 2]
+- TypeScript strict/noUnused: PASS.
+- Vite production build: PASS.
+- Playwright po rozszerzeniu testów: 16/16 PASS; sprawdzone dojście LCD do ramki,
+  16 godzin, wykres bez czasu/temperatury w kafelkach, 16 prowadnic, animacje
+  deszczu, warianty chmur i 4 ikony Meteopaty.
+- Zmiany nadal wyłącznie lokalne. Brak publikacji i brak push.
+
+======================================================================
+KOREKTA CZYTELNOŚCI LCD I METEOPATY — 2026-08-22, ETAP 3
+======================================================================
+
+[RÓWNE KOLUMNY TEMPERATURA / GODZINA]
+- Dolny pasek LCD otrzymał osobny, ręcznie narysowany font 3×5 dla cyfr,
+  plusa, minusa i stopnia. Jest mniejszy i znacznie czytelniejszy niż główny 5×7.
+- Szerokość każdego znaku jest liczona przed rysowaniem, a cały napis jest
+  centrowany matematycznie względem środka jednej z sześciu równych kolumn.
+- Temperatura znajduje się w y=46, odpowiadająca godzina dokładnie pod nią w y=55.
+  Przykład 23° / 12 nie styka się już z sąsiednią kolumną i nie przesuwa wizualnie.
+- Ta sama korekta automatycznie działa na dużym LCD i w trybie widgetu, ponieważ
+  oba używają wspólnego WidgetUI.
+
+[WIĘKSZE, ŻYWE IKONY METEOPATY]
+- Ikony powiększono z 35×35 do 52×52 px, dodano własne tło radialne, obrys i glow.
+- Każdy wskaźnik ma osobną animację:
+  * ciśnienie: pulsujący symbol i obracający się przerywany pierścień,
+  * wilgotność: duża kropla podskakująca w rytmie klatkowym,
+  * wiatr: przesuwająca się strzałka oraz trzy ruchome podmuchy,
+  * UV: pulsujące słońce i wolno obracający się pierścień promieni.
+- Animacje respektują prefers-reduced-motion.
+- Zrzut kontrolny: test/redesign-shots/03a-meteopath.png.
+
+[WERYFIKACJA ETAPU 3]
+- TypeScript strict/noUnused: PASS.
+- Vite production build: PASS.
+- Playwright: 17/17 PASS, w tym automatyczna kontrola, że wszystkie cztery ikony
+  Meteopaty mają aktywną animację.
+- Zmiany pozostają lokalne; niczego nie opublikowano.
+
+======================================================================
+STATUS NOKII, OFFLINE I PROGNOZA CO 3 H — 2026-08-22, ETAP 4
+======================================================================
+
+[PASEK STATUSU LCD]
+- Górny pasek ma teraz układ klasycznej Nokii: zasięg po lewej,
+  NOK[animowane serce]A idealnie pośrodku i bateria po prawej.
+- Online: cztery rosnące pikselowe słupki zasięgu.
+- Offline: słupki natychmiast zmieniają się w duży pikselowy znak X/braku sieci.
+- Bateria jest celowo prawie pusta i mruga co 520 ms (żart zgodny z wymaganiem).
+- Elementy są rysowane bezpośrednio w framebufferze 104×64, bez emoji i bez
+  rozmycia po skalowaniu.
+
+[TRWAŁY TRYB OFFLINE]
+- Dodano src/services/weather_storage.ts z osobnym, bezterminowym zapisem ostatniej
+  poprawnie pobranej WeatherSnapshot.
+- Zapis obejmuje miejscowość, warunki bieżące, godziny i prognozę dzienną.
+- Widget odczytuje zapamiętaną prognozę przed pierwszym żądaniem sieciowym, więc
+  ma dane od razu i nie znika po utracie internetu.
+- Pełna aplikacja również startuje z ostatniej prognozy, a przy błędzie API wraca
+  do niej automatycznie. Podpis aktualizacji zmienia się wtedy na
+  „OFFLINE · zapamiętano HH:MM”.
+- Po odzyskaniu sieci aplikacja automatycznie pobiera świeże dane.
+- Cache schematu API podniesiono do pogoda3310:v3, aby wymusić nowy zestaw 24 h.
+
+[SIEDEM POZYCJI CO TRZY GODZINY]
+- Dostawcy danych zwracają teraz do UI 24 kolejne godziny zamiast 16.
+- LCD wybiera siedem najbliższych godzin podzielnych przez 3, ściśle po czasie
+  bieżącego pomiaru. Przykład: pomiar 03:00 -> 06, 09, 12, 15, 18, 21, 00.
+- Siedem punktów obejmuje około 21 godzin naprzód.
+- Widok Godziny pełnej aplikacji korzysta z wszystkich 24 pozycji.
+
+[PRECYZYJNE WYRÓWNANIE CYFR]
+- Po dodatkowej korekcie symbol stopnia nie uczestniczy już w centrowaniu kolumny.
+- Druga cyfra temperatury i druga cyfra godziny mają dokładnie tę samą współrzędną
+  prawej krawędzi. Stopień jest rysowany osobno, 2 px dalej.
+- Dzięki temu np. druga „1” z 21° znajduje się dokładnie nad drugą cyfrą „5” z 15,
+  a nie nad środkiem całego napisu 21°.
+- Rozmiar fontu 3×5 pozostał bez zmian. Siedem kolumn nadal mieści się w 104 px.
+
+[SCRIPTABLE]
+- Natywny skrypt Scriptable także zapisuje ostatnią odpowiedź w pliku lokalnym,
+  pokazuje X w offline, pustą baterię, wycentrowane NOK[serce]A i siedem punktów
+  co 3 h. Bateria zmienia stan przy odświeżeniu systemowym (iOS nie pozwala na
+  ciągłą animację widgetu natywnego).
+
+[WERYFIKACJA ETAPU 4]
+- TypeScript strict/noUnused: PASS.
+- Vite production build: PASS.
+- Playwright: 20/20 PASS.
+- Test obejmuje trwały zapis prognozy, podpis OFFLINE, 24 godziny w aplikacji,
+  działanie już otwartego widgetu po utracie sieci i brak błędów konsoli.
+- Zrzut online: test/redesign-shots/04-widget.png.
+- Zrzut offline z X zasięgu: test/redesign-shots/04b-widget-offline.png.
+- Nadal brak publikacji i brak operacji na zdalnym repozytorium.
+
+======================================================================
+ŻYWY WIDGET I ODŚWIEŻANIE 15 MIN — 2026-08-22, ETAP 5
+======================================================================
+
+[WEBOWY WIDGET JAK MINI-APLIKACJA]
+- Widget uruchomiony jako strona/WebView działa stale: renderer rAF animuje serce,
+  baterię i pogodę, a zegar logiki pozostaje aktywny, gdy system nie usypia WebView.
+- Dodano wymuszone pobieranie świeżej prognozy co dokładnie 15 minut (900000 ms).
+- Timer nie korzysta z 10-minutowego cache WeatherService: forceRefresh omija cache
+  snapshotu i rzeczywiście uruchamia kaskadę API.
+- Service worker dla prognoz zmieniono ze stale-while-revalidate na network-first.
+  Dzięki temu cykl 15-minutowy nie dostaje poprzedniej odpowiedzi w tle; online
+  otrzymuje świeżą sieć, offline wraca do cache.
+- Po visibilitychange do visible, focus lub pageshow widget natychmiast wymusza
+  świeże pobranie. Zdarzenia mają tylko 5-sekundowy debounce chroniący przed trzema
+  identycznymi żądaniami podczas jednego wybudzenia.
+- Po odzyskaniu zdarzenia online widget odświeża API od razu.
+- pagehide z bfcache nie niszczy już widgetu; powrót z uśpionej karty zachowuje
+  renderer i uruchamia odświeżenie.
+
+[SCRIPTABLE / IOS]
+- refreshAfterDate w skrypcie natywnym zmieniono z 30 na 15 minut.
+- Każde ręczne otwarcie/uruchomienie skryptu pobiera dane natychmiast.
+- Ograniczenie systemowe: widget Scriptable na ekranie domowym jest migawką
+  WidgetKit. iOS sam przyznaje budżet odświeżeń i może przesunąć refreshAfterDate;
+  JavaScript nie pozostaje uruchomiony w tle, więc nie da się zagwarantować
+  dokładnego cyklu 15:00 ani animacji na żywo bez natywnej aplikacji i mechanizmu
+  Live Activity/push. Webowy widget w aktywnym WebView działa zgodnie z pełnym
+  cyklem 15 minut i odświeżeniem po wybudzeniu.
+
+[WERYFIKACJA ETAPU 5]
+- Service worker: pogoda3310-v4 (nowa strategia API).
+- TypeScript strict/noUnused: PASS.
+- Vite production build: PASS.
+- Playwright: 21/21 PASS, w tym automatyczna kontrola zaplanowanego interwału
+  900000 ms, pracy po utracie sieci i trwałego cache-last.
+- Wszystko nadal wyłącznie lokalnie; bez publikacji.
+
+======================================================================
+PRZYGOTOWANIE PUBLIKACJI — 2026-08-22, ETAP 6
+======================================================================
+
+[GITHUB I GITHUB PAGES]
+- Przygotowano workflow .github/workflows/deploy.yml publikujący katalog dist
+  przez oficjalny mechanizm GitHub Pages.
+- CI korzysta z Node.js 22 i npm ci, dlatego starsza lokalna wersja Node nie ma
+  wpływu na build na GitHubie.
+- README ma pełny opis polski i angielski oraz osobne linki do aplikacji i widgetu.
+- Pole Website repozytorium zostanie ustawione na adres GitHub Pages, a krótki
+  opis repozytorium będzie dwujęzyczny (PL/EN).
+- Usunięto z kodu i dokumentacji stary jawny klucz WeatherAPI przed utworzeniem
+  pierwszego commita. Publiczna wersja działa na bezkluczowym Open-Meteo, potem
+  met.no; WeatherAPI włącza się wyłącznie po podaniu VITE_WEATHERAPI_KEY w CI.
+
+[ANDROID]
+- Dodano projekt Capacitor Android o identyfikatorze pl.mechagdynia.pogoda3310.
+- Manifest zawiera Internet, GPS dokładny/przybliżony i mikrofon.
+- Wygenerowano wszystkie gęstości natywnej ikony launchera z public/icon.svg;
+  ikona pokazuje ekran LCD, chmurę, słońce, deszcz i błyskawicę.
+- Workflow release.yml korzysta z Javy 17, Android SDK 34 i Node.js 22.
+- Dodano android-ci.yml uruchamiany po pushu i w pull requestach: tworzy debug APK
+  na Javie 17 bez sekretów podpisu i publikuje go jako artefakt kontrolny Actions.
+- Poprawna struktura YAML: walidacja czterech sekretów i dekodowanie keystore są
+  jednym krokiem z shell: bash oraz run: |. chmod i assembleRelease są osobnymi
+  krokami z working-directory: android. Kopiowanie APK jest kolejnym krokiem.
+- Lokalny Gradle zatrzymał się na Javie 8 zainstalowanej w systemie. Nie jest to
+  błąd projektu: Android Gradle Plugin 8.2.1 wymaga co najmniej Javy 11, a CI ma
+  jawnie ustawioną Javę 17. Lokalny build webowy i synchronizacja Capacitor PASS.
+
+[WERYFIKACJA PRZED PUBLIKACJĄ]
+- Oba pliki workflow poprawnie przechodzą parser YAML.
+- TypeScript strict/noUnused: PASS.
+- Vite production build: PASS.
+- Capacitor sync android: PASS.
+- Playwright: 21/21 PASS.

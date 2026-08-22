@@ -1,0 +1,31 @@
+{
+  "name": "Pogoda_3310_widget",
+  "short_name": "Pogoda 3310",
+  "description": "Retro widget i pełna aplikacja pogodowa",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#101311",
+  "theme_color": "#172116",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "shortcuts": [
+    {
+      "name": "Podgląd widgetu",
+      "short_name": "Widget",
+      "url": "?view=widget"
+    }
+  ],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

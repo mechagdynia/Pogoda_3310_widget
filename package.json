@@ -1,0 +1,26 @@
+{
+  "name": "pogoda-3310-widget",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Retro weather widget and full PWA with a custom LCD pixel engine.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "cap:sync": "cap sync android",
+    "cap:open": "cap open android",
+    "android:apk": "npm run build && cap sync android && cd android && gradlew.bat assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "playwright": "^1.62.1",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.8"
+  }
+}
