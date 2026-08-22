@@ -490,3 +490,43 @@ PRZYGOTOWANIE PUBLIKACJI — 2026-08-22, ETAP 6
   oficjalnych bieżących wydań podniesiono: checkout v7, setup-node v7,
   setup-java v5, setup-android v4, upload-artifact v7, configure-pages v6,
   upload-pages-artifact v5 i deploy-pages v5. Własny build nadal używa Node 22.
+
+======================================================================
+PUBLIKACJA ZAKOŃCZONA — 2026-08-22, ETAP 7
+======================================================================
+
+[REPOZYTORIUM]
+- Publiczne repo: https://github.com/mechagdynia/Pogoda_3310_widget
+- Gałąź domyślna: main.
+- Pierwszy commit aplikacji: fe22308.
+- Commit aktualizujący Actions: eb75bf3.
+- Opis repo PL/EN:
+  „PL: Retro widget i aplikacja pogodowa 3310 | EN: Retro 3310 weather widget and app”.
+- Pole Website wskazuje: https://mechagdynia.github.io/Pogoda_3310_widget/
+- README zawiera osobne, pełniejsze sekcje Polski i English.
+
+[GITHUB PAGES]
+- Pełna aplikacja: https://mechagdynia.github.io/Pogoda_3310_widget/
+- Widget: https://mechagdynia.github.io/Pogoda_3310_widget/?view=widget
+- Pages działa przez workflow, publicznie, z wymuszonym HTTPS.
+- Deploy run 32542964887: SUCCESS.
+- Pierwszy deploy wystartował przed aktywacją Pages i dostał 404 konfiguracji;
+  po włączeniu Pages został ponowiony i zakończył się SUCCESS. Nie był to błąd
+  kodu, YAML ani Node.
+
+[ANDROID CI]
+- Android CI run 32542964885: SUCCESS.
+- Node 22, Java 17, Android SDK 34, npm ci, Vite build, Capacitor sync i
+  ./gradlew assembleDebug: wszystkie kroki SUCCESS.
+- Debug APK został zapisany jako artefakt „pogoda-3310-debug” w GitHub Actions.
+- Workflow Android Release jest gotowy, ale celowo nie uruchomiono wydania
+  podpisanego: wymaga najpierw dodania czterech sekretów keystore w ustawieniach
+  repozytorium. Nie opublikowano niepodpisanego APK jako oficjalnego Release.
+
+[WERYFIKACJA LIVE]
+- Microsoft Edge/Playwright, viewport telefonu 390×844.
+- Aplikacja: HTTP 200, tytuł „Pogoda_3310_widget”.
+- Widget: HTTP 200, jeden aktywny canvas LCD.
+- Błędy wykonania strony: 0.
+- Wizualnie potwierdzono ekran NOK[serce]A, status, duże wyrównane temperatury,
+  godziny co 3 h, animowaną pogodę oraz samodzielny widok widgetu bez przycisków.
