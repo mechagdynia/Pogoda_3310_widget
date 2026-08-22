@@ -1,0 +1,6 @@
+{
+  "name": "api_ninjas",
+  "algorithm": "AES-256-GCM",
+  "key_fingerprint_sha256": "9df3355f1a23b971016ba0541eb93be609aa06bab9a4c3b7a8c5255351d80246",
+  "payload": "C-YC4Da2BjPbim9CHwnMz051godweDXxOX4NkWmzPfxG4imz-iJbuYfvIeslGfR9el8U8N5pe6O9oL2BQHJGZOX_IAM"
+}

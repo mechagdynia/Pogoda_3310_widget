@@ -11,7 +11,7 @@ const errors = [];
 const checks = [];
 const check = (name, ok) => { checks.push([name, Boolean(ok)]); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`); };
 
-const days = Array.from({ length: 16 }, (_, i) => `2026-08-${String(22 + i).padStart(2, '0')}`);
+const days = Array.from({ length: 16 }, (_, i) => new Date(Date.UTC(2026, 7, 22 + i)).toISOString().slice(0, 10));
 const times = Array.from({ length: 48 }, (_, i) => {
   const date = new Date(Date.UTC(2026, 7, 22, i));
   return date.toISOString().slice(0, 16);
@@ -19,9 +19,14 @@ const times = Array.from({ length: 48 }, (_, i) => {
 const forecast = {
   latitude: 52.23, longitude: 21.01, timezone: 'Europe/Warsaw',
   current: { time: '2026-08-22T12:00', temperature_2m: 24.4, relative_humidity_2m: 68, apparent_temperature: 25.2, precipitation: 0, weather_code: 1, cloud_cover: 25, wind_speed_10m: 13, wind_direction_10m: 245, pressure_msl: 1015 },
-  hourly: { time: times, temperature_2m: times.map((_, i) => 20 + Math.sin(i / 5) * 5), weather_code: times.map((_, i) => i % 8 === 0 ? 61 : 1), precipitation_probability: times.map((_, i) => i % 8 === 0 ? 62 : 8), wind_speed_10m: times.map((_, i) => 9 + i % 7), cloud_cover: times.map((_, i) => [5, 30, 65, 100][i % 4]) },
-  daily: { time: days, weather_code: days.map((_, i) => [1, 2, 61, 3][i % 4]), temperature_2m_max: days.map((_, i) => 24 - i % 5), temperature_2m_min: days.map((_, i) => 14 - i % 3), precipitation_probability_max: days.map((_, i) => i % 3 * 25), wind_speed_10m_max: days.map((_, i) => 14 + i % 9), precipitation_sum: days.map((_, i) => i % 3 ? 1.2 : 0) },
+  hourly: { time: times, temperature_2m: times.map((_, i) => 20 + Math.sin(i / 5) * 5), weather_code: times.map((_, i) => i % 8 === 0 ? 61 : 1), precipitation_probability: times.map((_, i) => i % 8 === 0 ? 62 : 8), wind_speed_10m: times.map((_, i) => 9 + i % 7), cloud_cover: times.map((time, i) => time.endsWith('T03:00') ? 5 : [5, 30, 65, 100][i % 4]), cloud_cover_low: times.map(() => 18), cloud_cover_mid: times.map(() => 42), cloud_cover_high: times.map(() => 36), visibility: times.map(() => 24000) },
+  daily: { time: days, weather_code: days.map((_, i) => [1, 2, 61, 3][i % 4]), temperature_2m_max: days.map((_, i) => 24 - i % 5), temperature_2m_min: days.map((_, i) => 14 - i % 3), precipitation_probability_max: days.map((_, i) => i % 3 * 25), wind_speed_10m_max: days.map((_, i) => 14 + i % 9), precipitation_sum: days.map((_, i) => i % 3 ? 1.2 : 0), sunrise: days.map((day) => `${day}T05:42`), sunset: days.map((day) => `${day}T19:48`) },
 };
+const kpForecast = [
+  { time_tag: '2026-08-22T15:00:00', kp: 2, observed: 'estimated', noaa_scale: null },
+  { time_tag: '2026-08-23T00:00:00', kp: 6.33, observed: 'predicted', noaa_scale: 'G2' },
+  { time_tag: '2026-08-24T00:00:00', kp: 4, observed: 'predicted', noaa_scale: null },
+];
 
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'pl-PL', geolocation: { latitude: 50.0647, longitude: 19.945 }, permissions: ['geolocation'], serviceWorkers: 'block' });
@@ -39,6 +44,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.route('**/v1/forecast?**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(forecast) }));
 await page.route(/geocoding-api\.open-meteo\.com\/v1\/search/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [{ id: 1, name: 'Kraków', country: 'Polska', admin1: 'Małopolskie', latitude: 50.0647, longitude: 19.945, population: 800000 }] }) }));
 await page.route('**/reverse-geocode-client?**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ city: 'Kraków', countryName: 'Polska', principalSubdivision: 'Małopolskie' }) }));
+await page.route('**/noaa-planetary-k-index-forecast.json', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(kpForecast) }));
 
 await page.goto(base, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('[data-panel="today"] .metric-card', { timeout: 10000 });
@@ -61,9 +67,13 @@ await page.screenshot({ path: path.join(shots, '01-full-app.png') });
 
 await page.click('[data-section="hours"]');
 check('prognoza godzinowa jest osobnym widokiem i pokazuje 24 godziny', await page.locator('[data-panel="hours"].active .hour-card').count() === 24);
-check('temperatura i godzina są na wykresie, nie w kafelkach', await page.locator('.hour-card time, .hour-card > strong').count() === 0 && await page.locator('.chart-temp').count() === 24 && await page.locator('.chart-hour').count() === 24);
+check('kafelki pokazują 24 dokładne godziny bez powielania temperatury', await page.locator('.hour-card time').count() === 24 && await page.locator('.hour-card time').first().textContent() !== 'TERAZ' && await page.locator('.hour-card > strong').count() === 0);
+check('temperatura i godzina pozostają na wykresie', await page.locator('.chart-temp').count() === 24 && await page.locator('.chart-hour').count() === 24);
+check('nagłówek godzin nie powtarza prognozy godzinowej', await page.locator('[data-panel="hours"] .section-heading').textContent() === 'Najbliższe godziny24 pomiarów');
 check('wykres ma przerywane prowadnice', await page.locator('.chart-guide').count() === 24);
 check('kafelki mają animacje deszczu i warianty zachmurzenia', await page.locator('.hour-card .rain .rain-lines').count() > 0 && await page.locator('.hour-card .cloud-low, .hour-card .cloud-mid, .hour-card .cloud-high').count() > 0);
+const nightAtThree = await page.locator('.hour-card').evaluateAll((cards) => cards.some((card) => card.querySelector('time')?.textContent?.startsWith('03') && card.querySelector('.moon-clear, .moon-low, .moon-mid')));
+check('o 03:00 pogodna ikona pokazuje Księżyc zamiast Słońca', nightAtThree);
 await page.screenshot({ path: path.join(shots, '02-hours.png') });
 await page.click('[data-section="week"]');
 check('prognoza 14 dni jest poza ekranem głównym', await page.locator('[data-panel="week"].active .forecast-row').count() === 14);
@@ -73,6 +83,34 @@ const movingMeteoIcons = await page.evaluate(() => [...document.querySelectorAll
 check('wszystkie ikony meteopaty są animowane', movingMeteoIcons === 4);
 await page.waitForTimeout(450);
 await page.screenshot({ path: path.join(shots, '03a-meteopath.png') });
+
+await page.click('[data-section="sky"]');
+await page.waitForSelector('[data-panel="sky"].active .moon-week article');
+await page.waitForFunction(() => document.querySelector('.aurora-card')?.textContent?.includes('Kp 6.3'));
+check('menu podświetla tylko aktywną zakładkę Niebo', await page.locator('.section-tabs [data-section].active').count() === 1 && await page.locator('[data-section="sky"].active').count() === 1);
+check('zakładka Niebo pokazuje siedem faz Księżyca', await page.locator('.moon-week article .moon-glyph').count() === 7);
+check('najbliższa pełnia ma datę i liczbę dni', (await page.locator('.full-moon-card').innerText()).includes('Za około'));
+check('prognoza zorzy korzysta z Kp i progu lokalizacji', (await page.locator('.aurora-card').innerText()).includes('Kp 6.3') && (await page.locator('.aurora-card').innerText()).includes('Kp 6'));
+check('zjawiska atmosferyczne wynikają z prognozy tygodniowej', await page.locator('.phenomena-list article').count() > 0);
+check('Niebo ocenia wschód i zachód dziś oraz jutro z warstw chmur', await page.locator('.twilight-card').count() === 4 && (await page.locator('.twilight-card').first().innerText()).includes('piękny'));
+check('ciekawostka wskazuje najbliższą widoczną planetę z godziną i odległością', await page.locator('.nearest-planet-card').count() === 1 && (await page.locator('.nearest-planet-card').innerText()).includes('mln km'));
+check('kalendarz nieba pokazuje aktywny rój meteorów', (await page.locator('.space-events').innerText()).includes('Perseidy'));
+await page.screenshot({ path: path.join(shots, '03b-sky.png') });
+await page.locator('.twilight-grid').scrollIntoViewIfNeeded();
+await page.screenshot({ path: path.join(shots, '03b1-twilight.png') });
+await page.locator('.nearest-planet-card').scrollIntoViewIfNeeded();
+await page.screenshot({ path: path.join(shots, '03b2-astronomy.png') });
+
+await page.click('[data-section="horoscope"]');
+await page.waitForSelector('.horoscope-card p:not(.horoscope-loading)');
+check('horoskop ma wszystkie 12 znaków', await page.locator('.zodiac-picker button').count() === 12);
+check('domyślna ikona horoskopu odpowiada znakowi bieżącego dnia', await page.locator('#zodiac-tab-icon').textContent() === '♌');
+check('horoskop dzienny jest po polsku', (await page.locator('.horoscope-card p:not(.horoscope-loading)').innerText()).length > 80);
+await page.click('[data-zodiac="aries"]');
+await page.waitForFunction(() => document.querySelector('#zodiac-tab-icon')?.textContent === '♈');
+check('każdy znak ma osobny horoskop i zmienia ikonę zakładki', await page.locator('#zodiac-tab-icon').textContent() === '♈' && await page.locator('[data-zodiac="aries"].active').count() === 1);
+check('wybrany znak pokazuje zakres dat obok nazwy', (await page.locator('.selected-zodiac-name').innerText()).replace(/\s+/g, ' ').includes('BARAN (OD 21.03 DO 19.04)'));
+await page.screenshot({ path: path.join(shots, '03c-horoscope.png') });
 
 await page.click('[data-action="search"]');
 await page.fill('#city-search', 'Krak');
@@ -98,6 +136,9 @@ await page.waitForTimeout(200);
 check('widget działa po utracie sieci', await page.locator('.widget-launcher #lcd').count() === 1);
 await page.screenshot({ path: path.join(shots, '04b-widget-offline.png') });
 await context.setOffline(false);
+await page.goto(`${base}?lang=en`, { waitUntil: 'domcontentloaded' });
+await page.waitForSelector('[data-panel="today"] .metric-card');
+check('język angielski wybiera się automatycznie lub parametrem diagnostycznym', await page.locator('[data-section="today"]').innerText() === '⌂\nToday' && (await page.locator('.app-footer').innerText()).includes('Data:'));
 check('brak błędów strony i konsoli', errors.length === 0);
 
 await page.setViewportSize({ width: 512, height: 512 });

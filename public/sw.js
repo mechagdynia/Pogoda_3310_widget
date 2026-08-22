@@ -1,4 +1,4 @@
-const VERSION = 'pogoda3310-v4';
+const VERSION = 'pogoda3310-v5';
 const SHELL_CACHE = VERSION + '-shell';
 const API_CACHE = VERSION + '-api';
 
@@ -8,6 +8,9 @@ const API_HOSTS = [
   'api.met.no',
   'api.weatherapi.com',
   'api.bigdatacloud.net',
+  'services.swpc.noaa.gov',
+  'freehoroscopeapi.com',
+  'api.mymemory.translated.net',
 ];
 
 self.addEventListener('install', () => {
@@ -33,10 +36,12 @@ self.addEventListener('fetch', (event) => {
     const isForecast =
       url.hostname === 'api.open-meteo.com' ||
       url.hostname === 'api.met.no' ||
-      url.hostname === 'api.weatherapi.com';
+      url.hostname === 'api.weatherapi.com' ||
+      url.hostname === 'services.swpc.noaa.gov';
     event.respondWith(isForecast ? networkFirst(req, API_CACHE) : staleWhileRevalidate(req));
   } else if (url.origin === self.location.origin) {
-    event.respondWith(req.mode === 'navigate' ? networkFirst(req, SHELL_CACHE) : cacheFirst(req));
+    const isLiveData = url.pathname.endsWith('/data/horoscopes.json');
+    event.respondWith(req.mode === 'navigate' || isLiveData ? networkFirst(req, SHELL_CACHE) : cacheFirst(req));
   }
 });
 

@@ -6,7 +6,7 @@
  * Uint8Array bitmaps at module init so the render loop never touches
  * string data.
  *
- * Icons: sun / partcloud / cloud / fog / rain / thunder / snow / wind
+ * Icons: sun / moon / partcloud / cloud / fog / rain / thunder / snow / wind
  * Glyphs (8x8): gps pin, microphone, magnifier, scroll arrows.
  */
 
@@ -104,6 +104,48 @@ const SUN_F1 = F([
   '0011000000000110',
   '0100000000000100',
   '0000000000000000',
+  '0000000000000000'
+]);
+
+/* ------------------------------------------------------------------ *
+ *  MOON — crescent with two tiny, alternating stars
+ * ------------------------------------------------------------------ */
+
+const MOON_F0 = F([
+  '0000000000000010',
+  '0000011110000000',
+  '0000111110000000',
+  '0001111100000000',
+  '0011111000000000',
+  '0011110000000000',
+  '0111110000000000',
+  '0111110000000000',
+  '0111110000000010',
+  '0111110000000000',
+  '0011110000000000',
+  '0011111000000000',
+  '0001111100000000',
+  '0000111110000000',
+  '0000011110000000',
+  '0000000000000000'
+]);
+
+const MOON_F1 = F([
+  '0000000000000000',
+  '0000011110000010',
+  '0000111110000000',
+  '0001111100000000',
+  '0011111000000000',
+  '0011110000000000',
+  '0111110000000000',
+  '0111110000000000',
+  '0111110000000000',
+  '0111110000000000',
+  '0011110000000010',
+  '0011111000000000',
+  '0001111100000000',
+  '0000111110000000',
+  '0000011110000000',
   '0000000000000000'
 ]);
 
@@ -540,10 +582,14 @@ function sunCloudFrame(sun: PixelFrame, cloudShift: number): PixelFrame {
 
 const SUNCLOUD_F0 = sunCloudFrame(SUN_F0, 0);
 const SUNCLOUD_F1 = sunCloudFrame(SUN_F1, 1);
+const MOONCLOUD_F0 = sunCloudFrame(MOON_F0, 0);
+const MOONCLOUD_F1 = sunCloudFrame(MOON_F1, 1);
 
 export const WEATHER_ICONS: Record<IconId, IconAnim> = {
   sun: { w: 16, h: 16, frames: [SUN_F0, SUN_F1], fps: 4 },
   suncloud: { w: 16, h: 16, frames: [SUNCLOUD_F0, SUNCLOUD_F1], fps: 4 },
+  moon: { w: 16, h: 16, frames: [MOON_F0, MOON_F1], fps: 2 },
+  mooncloud: { w: 16, h: 16, frames: [MOONCLOUD_F0, MOONCLOUD_F1], fps: 2 },
   partcloud: {
     w: 16,
     h: 16,

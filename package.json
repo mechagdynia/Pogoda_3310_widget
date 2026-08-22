@@ -14,7 +14,8 @@
     "android:apk": "npm run build && cap sync android && cd android && gradlew.bat assembleDebug"
   },
   "dependencies": {
-    "@capacitor/core": "^6.1.2"
+    "@capacitor/core": "^6.1.2",
+    "astronomy-engine": "^2.1.19"
   },
   "devDependencies": {
     "@capacitor/android": "^6.1.2",

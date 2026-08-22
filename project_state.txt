@@ -530,3 +530,185 @@ PUBLIKACJA ZAKOŃCZONA — 2026-08-22, ETAP 7
 - Błędy wykonania strony: 0.
 - Wizualnie potwierdzono ekran NOK[serce]A, status, duże wyrównane temperatury,
   godziny co 3 h, animowaną pogodę oraz samodzielny widok widgetu bez przycisków.
+
+======================================================================
+GODZINY W KAFELKACH — 2026-08-22, ETAP 8 (TYLKO LOKALNIE)
+======================================================================
+
+- W widoku Godziny każdy z 24 kafelków pokazuje teraz własną, dokładną godzinę
+  w formacie HH:MM nad żywą ikoną pogodową, także pierwszy kafelek.
+- Temperatury nie wróciły do kafelków: nadal są czytelnie umieszczone na wykresie
+  z przerywanymi prowadnicami i godzinami na osi.
+- Usunięto mały, powtarzający się napis „PROGNOZA GODZINOWA”. Pozostał jeden
+  wyraźny nagłówek „Najbliższe godziny”, przesunięty nieco wyżej.
+- Kafelki zwiększono tylko o 18 px i zmniejszono odstępy wewnętrzne, dzięki czemu
+  godzina ma własne miejsce bez ściskania animacji, procentu opadów i wiatru.
+- TypeScript strict/noUnused: PASS.
+- Vite production build: PASS.
+- Playwright: 23/23 PASS; test sprawdza 24 znaczniki czasu w kafelkach, brak
+  temperatur w kafelkach, zachowanie 24 temperatur/godzin na wykresie i brak
+  powtórzonego nagłówka.
+- Lokalny zrzut widoku: test/redesign-shots/02-hours.png.
+- Podgląd lokalny: http://127.0.0.1:4174/ (wejść w zakładkę „Godziny”).
+- Zmiana pozostaje lokalna. Nie wykonano commita ani pushu.
+
+======================================================================
+NOC, KSIĘŻYC, NIEBO, HOROSKOP I PL/EN — 2026-08-22, ETAP 9 (LOKALNIE)
+======================================================================
+
+[NOC I GODZINY]
+- Usunięto absurd pogodnego Słońca o 03:00. Ikona godzinowa porównuje lokalny
+  czas prognozy ze wschodem i zachodem Słońca z Open-Meteo; dopiero awaryjnie
+  stosuje zakres 20:00–06:00.
+- Dodano osobne animowane warianty: czysty Księżyc, Księżyc z małą chmurą oraz
+  Księżyc z większą chmurą. Deszcz, śnieg i burza zachowują własne animacje.
+- Test kontrolny wymusza pogodną godzinę 03:00 i sprawdza klasę moon-*.
+
+[ZAKŁADKA NIEBO]
+- Dodano osiem faz Księżyca, procent oświetlenia, wiek Księżyca, siedem kolejnych
+  dni oraz datę i orientacyjną liczbę dni do najbliższej pełni.
+- Dodano prognozę indeksu Kp NOAA SWPC i orientacyjny próg widoczności zorzy
+  zależny od szerokości geograficznej. Horyzont NOAA opisano uczciwie jako około
+  trzy dni; aplikacja nie udaje tygodniowej prognozy zorzy.
+- Tygodniowe zjawiska atmosferyczne są wyprowadzane z danych pogody: możliwa
+  tęcza, burza, mgła, zjawiska zimowe i dobre okno obserwacyjne.
+- Awaria NOAA ma osobny stan i nie pozostawia wiecznego komunikatu ładowania.
+
+[HOROSKOP]
+- Dodano zakładkę z 12 znakami. Domyślna ikona zakładki odpowiada znakowi dnia,
+  a użytkownik może wybrać i zapamiętać własny znak.
+- Każdy znak pobiera osobny dzienny tekst. Generator serwerowy pobiera Free
+  Horoscope API, dzieli dłuższe teksty i przygotowuje wersje EN oraz PL przez
+  MyMemory. Wynik trafia do public/data/horoscopes.json.
+- Workflow horoscopes.yml uruchamia generator codziennie i może użyć API Ninjas
+  jako źródła zapasowego przez sekret repo API_NINJAS_API_KEY.
+- Klucz API nie trafia do Pages ani JavaScriptu. GitHub Pages jest statyczne,
+  więc klucz umieszczony w artefakcie strony byłby publicznie dostępny.
+- Lokalna próba generatora: PASS, 12/12 znaków, PL + EN, zapasowe API nie było
+  potrzebne.
+
+[JĘZYK]
+- Aplikacja i widget automatycznie wybierają polski dla języka pl telefonu lub
+  przeglądarki, w pozostałych przypadkach angielski.
+- Lokalizowane są nawigacja, metryki, porady, wyszukiwanie, GPS, głos, offline,
+  pogoda, Niebo, meteopata oraz horoskop. Parametr ?lang=pl lub ?lang=en służy
+  tylko do diagnostyki.
+
+[SEJF API NINJAS]
+- Klucz lokalnego sejfu AES-256-GCM ma dokładnie 64 znaki szesnastkowe (32 bajty).
+- Plik klucza pozostaje w ignorowanym .local-secrets/Pogoda_3310_widget/vault.key.
+- Repo może zawierać wyłącznie config/api_ninjas.enc.json, narzędzie
+  tools/api_secret_vault.py i instrukcję API_NINJAS_SETUP.txt.
+- Skan bezpieczeństwa: jawny prefiks sekretu nie występuje w drzewie roboczym;
+  folder .local-secrets i pliki .raw/.decrypted są ignorowane przez Git.
+- Do GitHub Actions jawny klucz należy później dodać jako Repository Secret;
+  forki GitHuba nie otrzymują sekretów repozytorium.
+
+[SCRIPTABLE]
+- scriptable/Pogoda_3310_widget.js pozostawiono bez zmian.
+- Lokalny hash Git blob ed0389ccefe00941f29db3e03c7a1dac01106628 jest identyczny
+  z plikiem zdalnym, który użytkownik potwierdził jako działający.
+
+[WERYFIKACJA WEB]
+- TypeScript strict/noUnused: PASS.
+- Vite production build: PASS.
+- Playwright/Edge: 34/34 PASS, bez błędów strony i konsoli.
+- Sprawdzono m.in. 24 godziny, Księżyc o 03:00, siedem faz, pełnię, NOAA Kp,
+  zjawiska, 12 znaków, osobne horoskopy, PL/EN, GPS, offline i widget 15 min.
+- Zrzuty: test/redesign-shots/02-hours.png, 03b-sky.png,
+  03c-horoscope.png i 04-widget.png.
+
+======================================================================
+LOKALNE ANDROID SDK I APK — 2026-08-22, ETAP 10 (LOKALNIE)
+======================================================================
+
+- Zainstalowano Eclipse Temurin JDK 17.0.20.8. Systemowe JAVA_HOME wskazuje JDK 17.
+- Z oficjalnego dl.google.com pobrano Command-line Tools 15859902 (148,4 MB).
+  SHA-256 archiwum zgodny z dokumentacją Google:
+  90ae805d20434428bffcb699c290860f19bb5f66a67e6b330067e3de801fb04a.
+- Android SDK znajduje się w C:/Users/mecha/AppData/Local/Android/Sdk.
+- Zainstalowano platform-tools, platforms;android-34 oraz build-tools;34.0.0.
+  Fizycznie potwierdzono adb.exe, android-34/android.jar i aapt2.exe.
+- Ignorowany android/local.properties wskazuje lokalne sdk.dir.
+- Środowisko zarządzane zablokowało trwały zapis ANDROID_HOME/PATH do rejestru.
+  Nie wpływa to na projekt: tools/build_android_local.ps1 ustawia Javę i SDK
+  sesyjnie oraz wykonuje typecheck, Vite, Capacitor sync i Gradle.
+- Skrypt build_android_local.ps1 sprawdzono także w trybie -SkipWeb. Pierwsza
+  próba wykryła pułapkę PowerShella z jednoelementowym wynikiem potoku; wynik
+  został jawnie opakowany w tablicę. Powtórka: BUILD SUCCESSFUL w 2 s.
+- Końcowy Gradle assembleDebug na Javie 17: BUILD SUCCESSFUL, 82 zadania.
+- Pełny przebieg skryptu (TypeScript, Vite, Capacitor i Gradle): PASS.
+- APK: android/app/build/outputs/apk/debug/app-debug.apk, 3,57 MB.
+- SHA-256 APK:
+  32c1490f3ebeef2cbaa43d5610dc15af83d638500f77adfb0fa12f7fab041b06.
+- Ostrzeżenie o nowszym formacie SDK XML jest nieszkodliwe; nie przerwało builda.
+- Nadal bez commita, pushu i publikacji — aplikacja czeka na podgląd użytkownika.
+
+======================================================================
+ZAKRESY DAT ZNAKÓW ZODIAKU — 2026-08-22, ETAP 11 (LOKALNIE)
+======================================================================
+
+- Każdy z 12 znaków ma jawny zakres dat zgodny z funkcją automatycznie wybierającą
+  znak dnia.
+- Po kliknięciu znaku nazwa w karcie ma format np.
+  „Strzelec (od 22.11 do 21.12)”.
+- W języku angielskim zakres jest lokalizowany, np. „Sagittarius (22 Nov – 21 Dec)”.
+- Zakres pozostaje przy nazwie i zawija się bez nachodzenia na tekst na małym ekranie.
+
+======================================================================
+LOKALNE NIEBO I CIEKAWOSTKI ASTRONOMICZNE — 2026-08-22, ETAP 12 (LOKALNIE)
+======================================================================
+
+[WSCHÓD I ZACHÓD SŁOŃCA]
+- Zakładka Niebo pokazuje cztery lokalne karty: wschód i zachód dzisiaj oraz
+  jutro. Godziny pochodzą z prognozy dla wybranej lokalizacji i jej strefy czasu.
+- Ocena „dużej szansy na piękny” wschód/zachód nie jest losowym tekstem. Wynika
+  z warstw chmur niskich, średnich i wysokich, opadów oraz widzialności.
+- Tekst świadomie mówi o szansie, a nie gwarancji; pod kartami jest wyjaśnienie
+  sposobu oceny.
+
+[PLANETY I WYDARZENIA]
+- Dodano lokalne obliczenia Astronomy Engine. Biblioteka działa w urządzeniu,
+  nie wymaga płatnego API ani klucza i korzysta z modeli VSOP87/NOVAS.
+- Ciekawostka wybiera najbliższą Ziemi planetę spośród planet rzeczywiście
+  możliwych do obserwacji z bieżącej lokalizacji w ciągu 24 godzin. Warunki:
+  Słońce co najmniej 6 stopni pod horyzontem oraz planeta minimum 8 stopni nad
+  horyzontem. Pokazywane są odległość w mln km i AU, najlepsza godzina,
+  wysokość i kierunek nad horyzontem.
+- Kalendarz kolejnych dni wykrywa bliskie spotkania Księżyca i planet,
+  lokalne zaćmienia Słońca, widoczne zaćmienia Księżyca oraz aktywne główne
+  roje meteorów. Okna rojów są cykliczne i opisane jako orientacyjne.
+- Informacja wyraźnie zaznacza, że przeszkody terenowe, światła miasta i chmury
+  mogą ograniczyć rzeczywistą widoczność.
+- Źródła/metody: Open-Meteo (warstwy chmur i widzialność), Astronomy Engine
+  (pozycje i zdarzenia), kalendarz rojów International Meteor Organization.
+  To astronomia, nie baza wiedzy astrologicznej.
+
+[STARLINK — DECYZJA TECHNICZNA]
+- Dokładne przeloty wymagają świeżych elementów orbitalnych. Nie dodano
+  zgadywanych godzin ani pobierania całej grupy Starlink z każdego telefonu.
+- CelesTrak od 2026 egzekwuje ograniczenie jednego pobrania grupy na jej
+  aktualizację. Docelowy bezpieczny wariant to jeden cache aktualizowany przez
+  GitHub Actions, a następnie lokalne liczenie przelotów dla GPS. Pozostaje to
+  osobnym modułem, aby nie obciążać teraz strony wielomegabajtowym katalogiem.
+
+[DANE I INTERFEJS]
+- Open-Meteo pobiera teraz niskie, średnie i wysokie zachmurzenie, widzialność
+  oraz zachowuje 48 godzin, żeby ocenić także jutrzejszy zachód.
+- Dodano animowane karty złotej godziny, planety i wydarzeń. Osobne zrzuty QA:
+  test/redesign-shots/03b1-twilight.png i 03b2-astronomy.png.
+
+[WERYFIKACJA]
+- TypeScript i produkcyjny Vite build: PASS.
+- Playwright/Edge: 38/38 PASS, bez błędów strony i konsoli.
+- npm audit --omit=dev: 0 podatności w zależnościach produkcyjnych.
+- Pełny audit zgłasza 4 pozycje wyłącznie w narzędziach deweloperskich
+  (Vite/esbuild oraz Capacitor CLI/tar). Dostępne automatyczne poprawki wymagają
+  skoków głównych wersji; nie zastosowano ich przed podglądem aplikacji.
+- Lokalny Node: 22.13.0; workflow GitHub Actions: Node 22. Lokalna Java i CI:
+  Temurin 17.
+- Końcowy pełny build web -> Capacitor -> Gradle: BUILD SUCCESSFUL, 82 zadania.
+- APK: android/app/build/outputs/apk/debug/app-debug.apk, 3,65 MB.
+- SHA-256 APK:
+  01cf2e6d1e84fd8a7658ae25d6859bb53728ec313a8004afc6c089dfa69a6f55.
+- Nadal bez commita, pushu i publikacji — gotowe do lokalnego podglądu.

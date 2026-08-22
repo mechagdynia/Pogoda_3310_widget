@@ -1,7 +1,7 @@
 {
   "name": "Pogoda_3310_widget",
   "short_name": "Pogoda 3310",
-  "description": "Retro widget i pełna aplikacja pogodowa",
+  "description": "Retro widget pogodowy / Retro weather widget",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#101311",

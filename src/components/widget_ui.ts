@@ -1,5 +1,8 @@
 import { WEATHER_ICONS } from '../graphics/pixel_bitmaps';
 import type { LcdRenderer } from '../graphics/lcd_renderer';
+import type { AppLanguage } from '../i18n';
+import { detectLanguage, tx } from '../i18n';
+import { isNightTime } from '../services/astronomy_service';
 import { DEFAULT_CITY } from '../services/weather_service';
 import { readLastSnapshot, writeLastSnapshot } from '../services/weather_storage';
 import type { City, HourPoint, IconId, WeatherService, WeatherSnapshot } from '../types/weather';
@@ -25,7 +28,7 @@ const TINY_GLYPHS: Readonly<Record<string, readonly string[]>> = {
   '°': ['11', '11', '00', '00', '00'],
 };
 
-interface WidgetOptions { autoLoad?: boolean }
+interface WidgetOptions { autoLoad?: boolean; language?: AppLanguage }
 
 function storedCity(): City {
   try {
@@ -82,12 +85,15 @@ export class WidgetUI {
   private offline = !navigator.onLine;
   private refreshTimer = 0;
   private lastForcedRefreshAt = 0;
+  private readonly language: AppLanguage;
 
   constructor(
     private readonly lcd: LcdRenderer,
     private readonly weather: WeatherService,
     private readonly options: WidgetOptions = {},
-  ) {}
+  ) {
+    this.language = options.language ?? detectLanguage();
+  }
 
   start(): void {
     window.addEventListener('online', this.onConnectionChange);
@@ -150,7 +156,7 @@ export class WidgetUI {
     } catch {
       if (this.disposed || generation !== this.loadGeneration) return;
       this.loading = false;
-      this.error = 'BRAK DANYCH';
+      this.error = tx(this.language, 'BRAK DANYCH', 'NO DATA');
     }
   }
 
@@ -159,14 +165,14 @@ export class WidgetUI {
     lcd.clear();
     this.drawStatusBar();
     if (this.loading && !this.snapshot) {
-      lcd.textCenter(52, 29, 'ŁADOWANIE');
+      lcd.textCenter(52, 29, tx(this.language, 'ŁADOWANIE', 'LOADING'));
       lcd.textCenter(52, 40, '.'.repeat(1 + Math.floor(this.animTime / 350) % 3));
       lcd.present(dt);
       return;
     }
     if (!this.snapshot) {
-      lcd.textCenter(52, 28, this.error || 'BRAK DANYCH');
-      lcd.textCenter(52, 41, 'DOTKNIJ, ABY OTWORZYĆ');
+      lcd.textCenter(52, 28, this.error || tx(this.language, 'BRAK DANYCH', 'NO DATA'));
+      lcd.textCenter(52, 41, tx(this.language, 'DOTKNIJ, ABY OTWORZYĆ', 'TAP TO OPEN'));
       lcd.present(dt);
       return;
     }
@@ -174,8 +180,8 @@ export class WidgetUI {
     const current = this.snapshot.current;
     lcd.text(2, 11, this.city.name.slice(0, 16));
     lcd.text(2, 20, roundTemp(current.tempC), 2);
-    lcd.text(2, 36, conditionLabel(current.condition).slice(0, 15));
-    const anim = WEATHER_ICONS[this.cloudAwareIcon(current.icon, current.cloudCoverPct)];
+    lcd.text(2, 36, conditionLabel(current.condition, this.language).slice(0, 15));
+    const anim = WEATHER_ICONS[this.cloudAwareIcon(current.icon, current.cloudCoverPct, current.time)];
     const frame = Math.floor((this.animTime / 1000) * anim.fps);
     lcd.icon(84, 19, anim, frame);
 
@@ -263,8 +269,13 @@ export class WidgetUI {
     if (Math.floor(this.animTime / 520) % 2 === 0) lcd.fillRect(95, 4, 1, 2);
   }
 
-  private cloudAwareIcon(fallback: IconId, cloudCover: number): IconId {
-    if (!['sun', 'suncloud', 'partcloud', 'cloud'].includes(fallback)) return fallback;
+  private cloudAwareIcon(fallback: IconId, cloudCover: number, time: string): IconId {
+    if (!['sun', 'suncloud', 'moon', 'mooncloud', 'partcloud', 'cloud'].includes(fallback)) return fallback;
+    if (isNightTime(time, this.snapshot?.daily)) {
+      if (cloudCover <= 18) return 'moon';
+      if (cloudCover <= 88) return 'mooncloud';
+      return 'cloud';
+    }
     if (cloudCover <= 12) return 'sun';
     if (cloudCover <= 45) return 'suncloud';
     if (cloudCover <= 88) return 'partcloud';

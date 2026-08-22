@@ -9,6 +9,9 @@
  * reports `supported = false` and the UI hides the voice entry point.
  */
 
+import type { AppLanguage } from '../i18n';
+import { tx } from '../i18n';
+
 /* ------------------------------------------------------------------ *
  *  Minimal ambient typings (avoids depending on @types packages)
  * ------------------------------------------------------------------ */
@@ -95,9 +98,9 @@ export class SpeechService {
    * Start listening (pl-PL). Resolves via callbacks, never via promise,
    * to keep the call site simple and cancellation trivial.
    */
-  listen(cb: VoiceCallbacks): void {
+  listen(cb: VoiceCallbacks, language: AppLanguage = 'pl'): void {
     if (!this.supported) {
-      cb.onError('BRAK WSPIERCZANIA MOWY');
+      cb.onError(tx(language, 'BRAK OBSŁUGI MOWY', 'SPEECH NOT SUPPORTED'));
       return;
     }
     if (this.active) {
@@ -106,13 +109,13 @@ export class SpeechService {
 
     const Ctor = getRecognitionCtor();
     if (!Ctor) {
-      cb.onError('BRAK WSPIERCZANIA MOWY');
+      cb.onError(tx(language, 'BRAK OBSŁUGI MOWY', 'SPEECH NOT SUPPORTED'));
       return;
     }
 
     const rec = new Ctor();
     this.rec = rec;
-    rec.lang = 'pl-PL';
+    rec.lang = language === 'pl' ? 'pl-PL' : 'en-US';
     rec.continuous = false;
     rec.interimResults = false;
     rec.maxAlternatives = 1;
@@ -140,11 +143,11 @@ export class SpeechService {
       // 'no-speech' / 'aborted' are routine — surface a short message only
       // for real failures.
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        cb.onError('ODMOWIONO DOSTĘPU DO MIKROFONU');
+        cb.onError(tx(language, 'ODMOWIONO DOSTĘPU DO MIKROFONU', 'MICROPHONE ACCESS DENIED'));
       } else if (e.error === 'audio-capture') {
-        cb.onError('BRAK MIKROFONU');
+        cb.onError(tx(language, 'BRAK MIKROFONU', 'NO MICROPHONE'));
       } else {
-        cb.onError('BŁĄD ROZPOZNAWANIA');
+        cb.onError(tx(language, 'BŁĄD ROZPOZNAWANIA', 'RECOGNITION ERROR'));
       }
     };
 
@@ -160,7 +163,7 @@ export class SpeechService {
       rec.start();
     } catch {
       this.rec = null;
-      cb.onError('BŁĄD ROZPOZNAWANIA');
+      cb.onError(tx(language, 'BŁĄD ROZPOZNAWANIA', 'RECOGNITION ERROR'));
     }
   }
 
@@ -188,10 +191,10 @@ export class SpeechService {
  * ------------------------------------------------------------------ */
 
 const PLACE_PREFIXES: RegExp =
-  /^\s*(pogoda|prognoza|jak\s+jest|ile\s+stopni|temperatura)\s*(w|we|w\s+okolicach\s+|dla\s+|w\s+dziennie\s+)?/i;
+  /^\s*(pogoda|prognoza|jak\s+jest|ile\s+stopni|temperatura|weather|forecast|temperature|what(?:'s|\s+is)\s+the\s+weather)\s*(w|we|w\s+okolicach\s+|dla\s+|in|near|for)?/i;
 
 const FILLER_WORDS: RegExp =
-  /\b(pogoda|prognoza|dla|w|we|miasta|miasto|pokaż|pokaż|pokaz|proszę|proszę|zrób|zrob)\b/gi;
+  /\b(pogoda|prognoza|dla|w|we|miasta|miasto|pokaż|pokaz|proszę|zrób|zrob|weather|forecast|for|in|city|show|please)\b/gi;
 
 /**
  * Strip the typical Polish lead-ins from a transcript so the remainder

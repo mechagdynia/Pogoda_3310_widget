@@ -1,0 +1,49 @@
+API NINJAS — ZAPASOWY KLUCZ LOKALNY
+====================================
+
+Repozytorium zawiera tylko zaszyfrowany pakiet:
+  config/api_ninjas.enc.json
+
+Klucz AES-256 ma dokładnie 64 znaki szesnastkowe i pozostaje wyłącznie tutaj:
+  .local-secrets/Pogoda_3310_widget/vault.key
+
+Folder .local-secrets jest ignorowany przez Git. Jawnego API nie wolno wpisywać
+do kodu, README, project_state.txt, commita ani argumentu polecenia.
+
+WŁASNY KLUCZ API NINJAS
+-----------------------
+1. Utwórz lokalny, ignorowany plik:
+   .local-secrets/Pogoda_3310_widget/api_ninjas.raw
+2. Wklej do niego własny klucz.
+3. Uruchom:
+   python tools/api_secret_vault.py encrypt --name api_ninjas \
+     --input-file .local-secrets/Pogoda_3310_widget/api_ninjas.raw \
+     --output config/api_ninjas.enc.json
+4. Usuń plik .raw. Zaszyfrowany JSON można opublikować, ale vault.key trzeba
+   zachować lokalnie i najlepiej zabezpieczyć kopią offline.
+
+LOKALNE ODSZYFROWANIE
+---------------------
+python tools/api_secret_vault.py decrypt \
+  --input-file config/api_ninjas.enc.json \
+  --output .local-secrets/Pogoda_3310_widget/api_ninjas.decrypted
+
+Plik wynikowy także jest ignorowany przez Git.
+
+WAŻNE O APLIKACJI WWW
+---------------------
+Kod przeglądarkowy nie odszyfrowuje tego klucza. Gdyby klucz i deszyfrator były
+wysłane do przeglądarki, każdy użytkownik mógłby odczytać sekret w pamięci albo
+w nagłówku żądania. Dotyczy to także klucza wstrzykniętego do artefaktu GitHub
+Pages: nie ma go wtedy w repo, ale nadal może go pobrać każdy odwiedzający stronę.
+
+BEZPIECZNY WARIANT DLA GITHUB PAGES
+-----------------------------------
+1. W ustawieniach repo wybierz Settings -> Secrets and variables -> Actions.
+2. Dodaj Repository secret o nazwie API_NINJAS_API_KEY.
+3. Wartością sekretu ma być jawny klucz API Ninjas.
+
+Workflow horoscopes.yml przekazuje ten sekret wyłącznie do serwerowego generatora.
+Generator najpierw używa Free Horoscope API, a API Ninjas tylko jako zapasowego
+źródła. Do Pages trafia gotowy public/data/horoscopes.json bez klucza. Forki nie
+otrzymują sekretu; mogą nadal działać z podstawowym, bezkluczowym API.

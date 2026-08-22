@@ -37,6 +37,8 @@ export type WeatherCondition =
 export type IconId =
   | 'sun'
   | 'suncloud'
+  | 'moon'
+  | 'mooncloud'
   | 'partcloud'
   | 'cloud'
   | 'fog'
@@ -70,34 +72,23 @@ export function conditionToIcon(c: WeatherCondition): IconId {
   }
 }
 
-/** Human readable (Polish) label for a condition, used on the LCD. */
-export function conditionLabel(c: WeatherCondition): string {
-  switch (c) {
-    case 'clear':
-      return 'CZYSTO';
-    case 'partly-cloudy':
-      return 'CZ. CHMURY';
-    case 'cloudy':
-      return 'POCHMURNIE';
-    case 'overcast':
-      return 'ZACHMURZONE';
-    case 'fog':
-      return 'MGAŁA';
-    case 'drizzle':
-      return 'MŻAWKA';
-    case 'rain':
-      return 'DESZCZ';
-    case 'heavy-rain':
-      return 'SILNY DESZCZ';
-    case 'thunderstorm':
-      return 'BURZA';
-    case 'snow':
-      return 'ŚNIEG';
-    case 'heavy-snow':
-      return 'SILNY ŚNIEG';
-    case 'sleet':
-      return 'MROZNA DESZCZ.';
-  }
+/** Human-readable LCD label in the selected app language. */
+export function conditionLabel(c: WeatherCondition, language: 'pl' | 'en' = 'pl'): string {
+  const labels: Record<WeatherCondition, [string, string]> = {
+    clear: ['CZYSTO', 'CLEAR'],
+    'partly-cloudy': ['CZ. CHMURY', 'PART CLOUD'],
+    cloudy: ['POCHMURNIE', 'CLOUDY'],
+    overcast: ['ZACHMURZONE', 'OVERCAST'],
+    fog: ['MGŁA', 'FOG'],
+    drizzle: ['MŻAWKA', 'DRIZZLE'],
+    rain: ['DESZCZ', 'RAIN'],
+    'heavy-rain': ['SILNY DESZCZ', 'HEAVY RAIN'],
+    thunderstorm: ['BURZA', 'STORM'],
+    snow: ['ŚNIEG', 'SNOW'],
+    'heavy-snow': ['SILNY ŚNIEG', 'HEAVY SNOW'],
+    sleet: ['DESZCZ ZE ŚN.', 'SLEET'],
+  };
+  return language === 'pl' ? labels[c][0] : labels[c][1];
 }
 
 /* ------------------------------------------------------------------ *
@@ -150,6 +141,11 @@ export interface HourPoint {
   windKmh: number;
   /** Cloud cover for choosing the sunny/cloudy animation variant. */
   cloudCoverPct?: number;
+  /** Cloud layers and visibility used for sunrise/sunset quality hints. */
+  cloudLowPct?: number;
+  cloudMidPct?: number;
+  cloudHighPct?: number;
+  visibilityKm?: number;
 }
 
 export interface DayPoint {
@@ -164,6 +160,9 @@ export interface DayPoint {
   windKmh: number;
   /** Daily total precipitation in mm (when available). */
   precipMm: number;
+  /** Local ISO sunrise/sunset used for correct day/night weather icons. */
+  sunrise?: string;
+  sunset?: string;
 }
 
 /* ------------------------------------------------------------------ *
@@ -174,6 +173,8 @@ export interface WeatherSnapshot {
   city: City;
   fetchedAt: string;       // ISO
   source: Provider;
+  /** IANA timezone supplied by the weather provider, when available. */
+  timezone?: string;
   current: CurrentWeather;
   /** Hourly for the current day, stepped every ~3h. */
   hourly: HourPoint[];
@@ -221,6 +222,10 @@ export interface OpenMeteoForecastResponse {
     precipitation_probability?: (number | null)[];
     wind_speed_10m: number[];
     cloud_cover?: (number | null)[];
+    cloud_cover_low?: (number | null)[];
+    cloud_cover_mid?: (number | null)[];
+    cloud_cover_high?: (number | null)[];
+    visibility?: (number | null)[];
   };
   daily: {
     time: string[];
@@ -230,6 +235,8 @@ export interface OpenMeteoForecastResponse {
     precipitation_probability_max: (number | null)[];
     wind_speed_10m_max: number[];
     precipitation_sum: (number | null)[];
+    sunrise?: string[];
+    sunset?: string[];
   };
 }
 
@@ -323,6 +330,7 @@ export interface WeatherApiResponse {
     country: string;
     lat: number;
     lon: number;
+    tz_id?: string;
   };
   current: {
     temp_c: number;

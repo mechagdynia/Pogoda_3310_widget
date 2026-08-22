@@ -9,5 +9,8 @@ test/shots/
 test/redesign-shots/
 .idea/
 .vscode/
+.tools/
 *.log
-
+.local-secrets/
+*.raw
+*.decrypted

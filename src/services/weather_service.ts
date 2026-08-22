@@ -331,14 +331,16 @@ function buildOpenMeteoUrl(city: City): string {
       'pressure_msl'
     ].join(','),
     hourly:
-      'temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation_probability,cloud_cover',
+      'temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation_probability,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,visibility',
     daily: [
       'weather_code',
       'temperature_2m_max',
       'temperature_2m_min',
       'precipitation_probability_max',
       'wind_speed_10m_max',
-      'precipitation_sum'
+      'precipitation_sum',
+      'sunrise',
+      'sunset'
     ].join(',')
   });
   return `${OM_FORECAST_URL}?${p.toString()}`;
@@ -379,7 +381,7 @@ async function fetchOpenMeteo(
     }
   }
   const hourly: HourPoint[] = [];
-  for (let i = start; i < times.length && hourly.length < 24; i++) {
+  for (let i = start; i < times.length && hourly.length < 48; i++) {
     const cond = wmoToCondition(raw.hourly.weather_code[i] ?? 0);
     const prob = raw.hourly.precipitation_probability?.[i] ?? 0;
     hourly.push({
@@ -389,7 +391,11 @@ async function fetchOpenMeteo(
       icon: conditionToIcon(cond),
       precipProbPct: Math.round(prob),
       windKmh: Math.round(raw.hourly.wind_speed_10m[i] ?? 0),
-      cloudCoverPct: Math.round(raw.hourly.cloud_cover?.[i] ?? 0)
+      cloudCoverPct: Math.round(raw.hourly.cloud_cover?.[i] ?? 0),
+      cloudLowPct: Math.round(raw.hourly.cloud_cover_low?.[i] ?? 0),
+      cloudMidPct: Math.round(raw.hourly.cloud_cover_mid?.[i] ?? 0),
+      cloudHighPct: Math.round(raw.hourly.cloud_cover_high?.[i] ?? 0),
+      visibilityKm: raw.hourly.visibility?.[i] == null ? undefined : round1(Number(raw.hourly.visibility[i]) / 1000)
     });
   }
 
@@ -408,7 +414,9 @@ async function fetchOpenMeteo(
       icon: conditionToIcon(cond),
       precipProbPct: Math.round(prob),
       windKmh: Math.round(d.wind_speed_10m_max[i] ?? 0),
-      precipMm: round1(sum)
+      precipMm: round1(sum),
+      sunrise: d.sunrise?.[i],
+      sunset: d.sunset?.[i]
     });
   }
 
@@ -416,6 +424,7 @@ async function fetchOpenMeteo(
     city,
     fetchedAt: new Date().toISOString(),
     source: 'open-meteo',
+    timezone: raw.timezone,
     current,
     hourly,
     daily
@@ -655,6 +664,7 @@ async function fetchWeatherApi(
     city,
     fetchedAt: new Date().toISOString(),
     source: 'weatherapi',
+    timezone: raw.location.tz_id,
     current,
     hourly,
     daily
