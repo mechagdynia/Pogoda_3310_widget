@@ -712,3 +712,24 @@ LOKALNE NIEBO I CIEKAWOSTKI ASTRONOMICZNE — 2026-08-22, ETAP 12 (LOKALNIE)
 - SHA-256 APK:
   01cf2e6d1e84fd8a7658ae25d6859bb53728ec313a8004afc6c089dfa69a6f55.
 - Nadal bez commita, pushu i publikacji — gotowe do lokalnego podglądu.
+
+======================================================================
+PUBLIKACJA GITHUB I GITHUB PAGES — 2026-08-22, ETAP 13
+======================================================================
+
+- Repozytorium docelowe: https://github.com/mechagdynia/Pogoda_3310_widget
+- Commit aplikacji: 94908f141756361da42f71d1d0521960c0dae9a8
+  „feat: add localized astronomy and horoscope experience”.
+- Push main: PASS, fast-forward z a54f246 do 94908f1; bez nadpisywania
+  jakichkolwiek nowych zmian zdalnych.
+- GitHub Pages workflow: PASS.
+  https://github.com/mechagdynia/Pogoda_3310_widget/actions/runs/32586058353
+- Android CI: PASS; debug APK został utworzony jako artefakt workflow.
+  https://github.com/mechagdynia/Pogoda_3310_widget/actions/runs/32586058385
+- Publiczna strona: https://mechagdynia.github.io/Pogoda_3310_widget/
+- Kontrola publicznej strony: HTTP 200 dla HTML oraz paczki JavaScript;
+  opublikowany plik index-CYwmbMoA.js zawiera moduł astronomii, polską kartę
+  najbliższej widocznej planety i horoskop.
+- Opis repo pozostaje dwujęzyczny PL/EN i zawiera poprawny link GitHub Pages.
+- Lokalny sekret sejfu, katalog .local-secrets, cache .tools i zrzuty testowe
+  nie zostały wysłane. Scriptable/Pogoda_3310_widget.js nie został zmieniony.
